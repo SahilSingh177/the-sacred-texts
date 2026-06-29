@@ -1,0 +1,29 @@
+This directory contains the code for generating a memory mountain for the x86-64 architecture. It is based on the CS:APP book.
+
+```text
+clock.{c,h}    - routines for using x86 and Alpha cycle timers
+fcyc2.{c,h}    - routines that estimate the number of cycles required
+                 by a function f that takes two arguments
+mountain.c     - program that generates the memory mountain
+```
+
+To run the program, compile it using:
+
+```bash
+gcc mountain.c clock.c fcyc2.c -o mount
+```
+
+This creates an executable file. Running it prints the memory mountain output, which can be saved to a text file using:
+
+```bash
+./mount > mountain.txt
+```
+
+The Python script `plot_mountain.py` helps visualize the memory mountain by plotting a 3D graph.
+
+```bash
+python -m venv env
+source env/bin/activate
+pip install matplotlib numpy
+python plot_mountain.py
+```
