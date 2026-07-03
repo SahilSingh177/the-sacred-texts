@@ -10,7 +10,7 @@ inline void append_(char*& ptr, const char (&str)[N]){
 
 unsigned int wakeup(unsigned int secs){
     unsigned int unslept = sleep(secs);
-    unsigned int time_elapsed = secs-unslept;
+    unsigned int time_elapsed = secs-unslept+1;
     char buf[64];
     char *ptr = buf;
     append_(ptr,"Woke up at ");
