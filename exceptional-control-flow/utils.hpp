@@ -32,3 +32,24 @@ inline void append_string(char *&ptr, const char *str)
 inline void append_char(char*& ptr, char c){
     *ptr++=c;
 }
+
+[[noreturn]] [[gnu::cold]] void unix_error(const char *msg) noexcept
+{
+    ::write(2, msg, ::strlen(msg));
+    ::write(2, ": ", 2);
+
+    const char *err_str = ::strerror(errno);
+    ::write(2, err_str, ::strlen(err_str));
+    ::write(2, "\n", 1);
+    ::_exit(1);
+}
+
+[[nodiscard]] inline pid_t Fork() noexcept
+{
+    pid_t pid = ::fork();
+    if (pid < 0) [[unlikely]]
+    {
+        unix_error("Fork error");
+    }
+    return pid;
+}
