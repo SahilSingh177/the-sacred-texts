@@ -1,0 +1,1 @@
+The computer architecture image was generated via the command `lstopo computer_arch.png` in the linux terminal.
