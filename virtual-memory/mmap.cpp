@@ -3,6 +3,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <stdint.h>
+#include <x86intrin.h> // for __rdtsc (time)
 #include "utils.hpp"
 
 int main(int argc, char *argv[]) noexcept
@@ -34,12 +36,13 @@ int main(int argc, char *argv[]) noexcept
     size_t file_size = statbuf.st_size;
 
     // Handle the edge case of an empty file gracefully
-    if (file_size == 0)
-    {
+    if(file_size == 0){
         ::close(fd);
         return 0;
     }
 
+    unsigned int dummy;
+    uint64_t start_cycles = __rdtscp(&dummy); // Serialized read before time
     // 4. Map the file into the process's address space
     // We map it as read-only (PROT_READ) and private (MAP_PRIVATE)
     // MAP_POPULATE for aggressive kernel read-ahead (faulting the pages early)
@@ -59,6 +62,8 @@ int main(int argc, char *argv[]) noexcept
     while(bytes_written < file_size){
         ssize_t n = ::write(STDOUT_FILENO, file_bytes + bytes_written, file_size - bytes_written);
         if(n < 0)[[unlikely]]{
+            if (errno == EINTR) continue; // Recover from signal interruptions
+            ::munmap(src, file_size);
             unix_error("Error writing to stdout");
         }
         bytes_written += n;
@@ -68,6 +73,17 @@ int main(int argc, char *argv[]) noexcept
     if(::munmap(src, file_size) < 0){
         unix_error("Error unmapping memory");
     }
+
+    uint64_t end_cycles = __rdtscp(&dummy); // Serialized read-after-time
+    uint64_t total_cycles = end_cycles - start_cycles;
+
+    // Print profiling data out to stderr so it doesn't pollute stdout text output
+    char perf_buf[128];
+    char *perf_ptr = perf_buf;
+    append_(perf_ptr, "\n[MMAP PERF] CPU Cycles taken: ");
+    append_var(perf_ptr, perf_buf, total_cycles);
+    append_char(perf_ptr, '\n');
+    ::write(2, perf_buf, perf_ptr - perf_buf);
 
     return 0;
 }
