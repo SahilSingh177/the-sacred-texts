@@ -127,3 +127,57 @@ Widget w1{};   // Calls DEFAULT constructor, not the initializer_list!
 Widget w2{{}}; // Calls initializer_list constructor with an empty list!
 Widget w3      // Calls initializer_list constructor with an empty list!
 ```
+
+### nullptr
+
+```cpp
+void f(int);
+void f(bool);
+void f(void*);
+
+f(0); // calls f(int) not f(void*)
+f(NULL); // might not compile, but usually calls f(int). Never calls f(void*)
+f(nullptr); // calls f(void*)
+```
+
+### typedefs vs alias
+
+```cpp
+typedef void(*FP)(int, const std::string&);
+
+// Prefer alias
+using FP = void (*)(int, const std::string&);
+```
+
+### Enums
+
+Unscoped enums vs Scoped enums:
+
+```cpp
+struct Color {black, white, red};
+auto white = false; // error! white already declared
+```
+```cpp
+struct class Color {black, white, red};
+auto white = false; // fine
+
+Color c = white; // error! no enum named "white"
+Color c = Color::white; //fine 
+```
+
+```cpp
+enum class UserInfoFields{uiName, uiEmail, uiReputation};
+
+UserInfo uInfo;
+
+template<typeName E>
+// This function takes an arbitrary enumerator and can return its value as a compile-time constant
+constexpr auto toUType(E enumerator) noexcept{
+    return static_cast<std::underlying_type_t<E>> (enumerator);
+}
+
+auto val = std::get<toUType(UserInfoFields::uiEmail)>(uiInfo);
+
+// otherwise we would done
+// auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uiInfo);
+```
