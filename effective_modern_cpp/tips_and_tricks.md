@@ -658,3 +658,121 @@ std::move means: treat this object as movable.
 
 std::forward means: preserve how the caller originally passed this object.
 ```
+
+### rvalue reference vs universal(forwarding) reference
+
+```cpp
+void f(Widget&& param); // rvalue ref
+Widget&& var1 = Widget(); // rvalue ref
+
+auto&& var2 = var1; // forwarding ref. auto has type deduction
+
+template<typename T>
+void f(T&& param); // forwarding ref, type deduction of param.
+
+
+template<typename T>
+void f(std::vector<T>&& param); // rvalue ref. param's type declaration is vector<T>&&.
+
+template<typename T>
+void f(const T&& param); // rvalue ref. param's type declaration is const T&&.
+```
+
+---
+
+`push_back vs emplace_back ref types`
+
+```cpp
+template<class T, class Allocator = allocator<T>>
+class vector {
+public:
+    void push_back(T&& x); // rvalue ref.
+    // Because by the time we call push_back, the class has already been instantiated and T is fully known. There is no type deduction happening when the function is called.
+};
+
+std::vector<Widget> v; 
+// The compiler instantiates the class. The function signature becomes:
+// void push_back(Widget&& x); 
+// No deduction is happening here anymore!
+
+template<class T, class Allocator = allocator<T>>
+class vector {
+public:
+    template<class... Args>
+    void emplace_back(Args&&... args); // Universal reference! Args is deduced per call.
+};
+```
+
+---
+
+If we are in a function that returns by value, and we are returning an object bound to an rvalue reference or a universal reference, we'll want to apply std::move or std::forward when we return the reference.
+
+```cpp
+Matrix operator+(Matrix&& lhs, const Matrix& rhs){
+    lhs+=rhs;
+    return std::move(lhs);
+}
+```
+
+using std::move in the return statement yields more efficient code.
+
+### Return Value Optimization (RVO)
+
+Compilers may skip over the copying or moving of a local object in a function that returns by value if:
+
+* the type of the local object is the same as that returned by the function.
+* the local object is what's being returned.
+
+```cpp
+Widget makeWidget(){
+    Widget w;
+    ...
+    return w; // "copy" w into return value.
+}
+```
+
+If the compilers choose not to perform copy elision, the object being returned must be treated as an rvalue. Thus, either copy elision takes place or std::move is implicitly applied to local objects being returned.
+
+
+---
+
+### Overloading on universal references
+
+An exact match beats a match with a promotion, so the universal reference overload is invoked. Although, in situations where a template instantiation and a non-template function(normal func) are equally good matches for a function call, the normal function is preferred.
+
+```cpp
+std::multiset<std::string> names;
+std::string nameFromIdx(int idx); // Helper function
+
+// Overload 1: Universal Reference
+template<typename T>
+void logAndAdd(T&& name) {
+    names.emplace(std::forward<T>(name));
+}
+
+// Overload 2: Normal Function (Non-template)
+void logAndAdd(int idx) {
+    names.emplace(nameFromIdx(idx));
+}
+
+// 1. Passes a string literal
+logAndAdd("Hello"); 
+// Resolves to Overload 1. (T is deduced as const char[6]). 
+
+// 2. Passes an int
+int x = 22;
+logAndAdd(x); 
+// Resolves to Overload 2. 
+// WHY: Template instantiation logAndAdd<int&>(int&) and normal logAndAdd(int) 
+// are both exact matches. Normal function is preferred!
+
+// 3. Passes a short
+short s = 5;
+logAndAdd(s); 
+// Resolves to Overload 1! (And causes a compile error inside the template).
+// Reasons: 
+// - Overload 1 creates an exact match: logAndAdd<short&>(short&).
+// - Overload 2 requires a promotion: short -> int.
+// An exact template match beats a normal function that requires a promotion.
+// Inside the template, it tried to pass a short to names.emplace(), which expects a string, causing a massive compilation error.
+```
