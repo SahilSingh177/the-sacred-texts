@@ -30,7 +30,6 @@ class W{
         int y = 1; // fine
         int z(0); // wrong (error!)
 };
-
 ```
 
 Uncopyable objects
@@ -118,7 +117,6 @@ class Widget{
 
 Widget w1(10, true); // calls first ctor
 Widget w2{10, true}; // error! requires narrowing conversions as bool can't exactly represent either value.
-
 ```
 
 ```cpp
@@ -132,7 +130,6 @@ class Widget{
 Widget w1(10, true); // calls first ctor
 Widget w2{10, true}; // calls first ctor as there's no way to convert ints and bools to std::strings 
 // thus compiler falls back on normal overload resolution.
-
 ```
 
 ```cpp
@@ -145,7 +142,6 @@ class Widget {
 Widget w1{};   // Calls DEFAULT constructor, not the initializer_list!
 Widget w2{{}}; // Calls initializer_list constructor with an empty list!
 Widget w3{ {} }; // Calls initializer_list constructor with an empty list!
-
 ```
 
 ### nullptr
@@ -158,7 +154,6 @@ void f(void*);
 f(0); // calls f(int) not f(void*)
 f(NULL); // might not compile, but usually calls f(int). Never calls f(void*)
 f(nullptr); // calls f(void*)
-
 ```
 
 ### typedefs vs alias
@@ -168,7 +163,6 @@ typedef void(*FP)(int, const std::string&);
 
 // Prefer alias
 using FP = void (*)(int, const std::string&);
-
 ```
 
 ### Enums
@@ -178,7 +172,6 @@ Unscoped enums vs Scoped enums:
 ```cpp
 enum Color {black, white, red};
 auto white = false; // error! white already declared
-
 ```
 
 ```cpp
@@ -187,7 +180,6 @@ auto white = false; // fine
 
 Color c = white; // error! no enum named "white"
 Color c = Color::white; //fine 
-
 ```
 
 ```cpp
@@ -205,7 +197,6 @@ auto val = std::get<toUType(UserInfoFields::uiEmail)>(uiInfo);
 
 // otherwise we would done
 // auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uiInfo);
-
 ```
 
 ### Delete function
@@ -223,7 +214,6 @@ class basic_ios : public ios_base {
         basic_ios& operator = (const basic_ios&) = delete;
         ...
 };
-
 ```
 
 Deleted functions can't be used in any way. Even code in member and friend functions(can access private functions)
@@ -245,7 +235,6 @@ class Derived: public Base {
         virtual void f1() override;
         virtual void f2() override; // ERROR! Base::f2 is not virtual.
 };
-
 ```
 
 ### Use const_iterators when possible
@@ -256,7 +245,6 @@ To prevent modifying the value that an iterator points to, we must use const ite
     std::vector<int> values;
     auto it  = std::find(values.cbegin(),values.cend(), 1983);
     values.insert(it, 1998);
-
 ```
 
 ### constexpr
@@ -275,7 +263,6 @@ constexpr int pow(int base, int exp) noexcept{
     for(int i=0; i<exp; i++) result*=base;
     return result;
 }
-
 ```
 
 ### Thread safety
@@ -322,7 +309,6 @@ class Widget{
         mutable int cachedValue;
         mutable bool cacheValid{false};
 };
-
 ```
 
 ### Special member function generation
@@ -378,7 +364,6 @@ public:
     // Its main difference from the move constructor is that the destination already owns something, so it must deal with 
     // its current resource first.
 };
-
 ```
 
 # R-value References, Move Semantics, and Perfect Forwarding
@@ -401,7 +386,6 @@ int x = 10;
 
 x = 20;       // x is an l-value expression
 int* p = &x;  // Its address can be taken
-
 ```
 
 Other examples:
@@ -411,7 +395,6 @@ x
 str
 vec[0]
 *ptr
-
 ```
 
 Being able to appear on the left-hand side of an assignment is not the formal definition of an l-value. For example, a `const`
@@ -420,7 +403,6 @@ object is still an l-value even though it cannot be assigned to.
 ```cpp
 const int value = 10;
 // value = 20; // Error, but value is still an l-value
-
 ```
 
 ---
@@ -439,14 +421,12 @@ Examples of prvalues:
 x + 5
 std::string("Hello")
 foo() // If foo returns an object by value
-
 ```
 
 Example of an xvalue:
 
 ```cpp
 std::move(x)
-
 ```
 
 An r-value does not necessarily lack identity. An xvalue refers to an existing object that still has identity.
@@ -455,7 +435,6 @@ An r-value does not necessarily lack identity. An xvalue refers to an existing o
 r-value
 ├── prvalue: temporary or newly computed value
 └── xvalue: existing object treated as expiring or movable
-
 ```
 
 ---
@@ -466,14 +445,12 @@ An r-value reference has the form:
 
 ```cpp
 T&&
-
 ```
 
 It can bind to an r-value expression.
 
 ```cpp
 std::string&& ref1 = std::string("hello");
-
 ```
 
 `std::string("hello")` is a temporary expression and a prvalue.
@@ -481,7 +458,6 @@ std::string&& ref1 = std::string("hello");
 ```cpp
 std::string name = "Hi";
 std::string&& ref2 = std::move(name);
-
 ```
 
 Here:
@@ -494,7 +470,6 @@ Here:
 ```cpp
 process(ref2);             // Passes an l-value
 process(std::move(ref2));  // Passes an xvalue
-
 ```
 
 Important distinction:
@@ -502,7 +477,6 @@ Important distinction:
 ```text
 The type of ref2 is std::string&&.
 The expression ref2 is an l-value.
-
 ```
 
 ---
@@ -516,14 +490,12 @@ It casts its argument into an xvalue, allowing move operations to be selected.
 ```cpp
 std::string a = "hello";
 std::string b = std::move(a);
-
 ```
 
 Conceptually:
 
 ```cpp
 static_cast<std::string&&>(a)
-
 ```
 
 The actual resource transfer is performed by the receiving operation, such as:
@@ -536,7 +508,6 @@ This expression alone does not transfer anything:
 
 ```cpp
 std::move(a);
-
 ```
 
 But the result does not necessarily need to be stored. Passing it to a function can also consume it:
@@ -544,7 +515,6 @@ But the result does not necessarily need to be stored. Passing it to a function 
 ```cpp
 process(std::move(a));
 container.push_back(std::move(a));
-
 ```
 
 A simplified implementation resembles:
@@ -554,7 +524,6 @@ template <typename T>
 constexpr std::remove_reference_t<T>&& move(T&& value) noexcept {
     return static_cast<std::remove_reference_t<T>&&>(value);
 }
-
 ```
 
 `std::remove_reference_t<T>` is used before adding `&&`.
@@ -566,7 +535,6 @@ For example:
 ```cpp
 T = std::string&
 T&& = std::string& && = std::string&
-
 ```
 
 After removing the reference:
@@ -574,7 +542,6 @@ After removing the reference:
 ```cpp
 std::remove_reference_t<T> = std::string
 std::remove_reference_t<T>&& = std::string&&
-
 ```
 
 Therefore, `std::move` unconditionally produces an xvalue expression.
@@ -585,7 +552,6 @@ Move constructors commonly accept non-const r-value references:
 
 ```cpp
 Widget(Widget&& other);
-
 ```
 
 A `const Widget` cannot bind to `Widget&&`.
@@ -593,7 +559,6 @@ A `const Widget` cannot bind to `Widget&&`.
 ```cpp
 const Widget a;
 Widget b = std::move(a);
-
 ```
 
 `std::move(a)` has type `const Widget&&`.
@@ -618,7 +583,6 @@ template <typename T>
 void wrapper(T&& value) {
     process(std::forward<T>(value));
 }
-
 ```
 
 Here, `T&&` is a forwarding reference because:
@@ -632,42 +596,36 @@ Examples:
 std::string name = "Hi!";
 
 wrapper(name);
-
 ```
 
 `name` is an l-value, so `T` is deduced as:
 
 ```cpp
 T = std::string&
-
 ```
 
 `std::forward<T>(value)` produces an l-value.
 
 ```cpp
 wrapper(std::string("hello"));
-
 ```
 
 The temporary is a prvalue. `T` is deduced as:
 
 ```cpp
 T = std::string
-
 ```
 
 `std::forward<T>(value)` produces an r-value.
 
 ```cpp
 wrapper(std::move(name));
-
 ```
 
 `std::move(name)` is an xvalue. `T` is deduced as:
 
 ```cpp
 T = std::string
-
 ```
 
 `std::forward<T>(value)` produces an r-value.
@@ -681,7 +639,6 @@ template <typename T>
 void wrapper(T&& value) {
     process(value);
 }
-
 ```
 
 `process` receives an l-value in every case.
@@ -697,7 +654,6 @@ std::string name = "Hi!";
 wrapper(name); // forwards as l-value 
 wrapper(std::string("hello")); // forwards as r-value, creates a temporary object 
 wrapper(std::move(name)); // forwards as r-value, xvalue (rvalue)
-
 ```
 
 The caller's original value category is preserved.
@@ -710,7 +666,6 @@ The caller's original value category is preserved.
 
 ```cpp
 std::move(value)
-
 ```
 
 * Requires only the expression being cast.
@@ -722,7 +677,6 @@ std::move(value)
 
 ```cpp
 std::forward<T>(value)
-
 ```
 
 * Requires both a template type argument and an expression.
@@ -737,7 +691,6 @@ Note:
 std::move means: treat this object as movable.
 
 std::forward means: preserve how the caller originally passed this object.
-
 ```
 
 ### rvalue reference vs universal(forwarding) reference
@@ -757,7 +710,6 @@ void f(std::vector<T>&& param); // rvalue ref. param's type declaration is vecto
 
 template<typename T>
 void f(const T&& param); // rvalue ref. param's type declaration is const T&&.
-
 ```
 
 ---
@@ -784,7 +736,6 @@ public:
     template<class... Args>
     void emplace_back(Args&&... args); // forwarding reference! Args is deduced per call.
 };
-
 ```
 
 ---
@@ -797,7 +748,6 @@ Matrix operator+(Matrix&& lhs, const Matrix& rhs){
     lhs+=rhs;
     return std::move(lhs);
 }
-
 ```
 
 using std::move in the return statement yields more efficient code.
@@ -815,7 +765,6 @@ Widget makeWidget(){
     ...
     return w; // "copy" w into return value.
 }
-
 ```
 
 If the compilers choose not to perform copy elision, the object being returned must be treated as an rvalue. Thus, either copy
@@ -863,7 +812,6 @@ logAndAdd(s);
 // - Overload 2 requires a promotion: short -> int.
 // An exact template match beats a normal function that requires a promotion.
 // Inside the template, it tried to pass a short to names.emplace(), which expects a string, causing a massive compilation error.
-
 ```
 
 ### Tag Dispatch
@@ -893,7 +841,6 @@ std::string nameFromIndex(int idx);
 void logAndAddImpl(int idx, std::true_type){
     logAndAdd(nameFromIndex(idx));
 }
-
 ```
 
 `std::true_type` and `std::false_type` are 'tags' whose only purpose is to force overload resolution to go the way we want.
@@ -926,7 +873,6 @@ class Person{
         explicit Person(T&& n);
         ...
 };
-
 ```
 
 Now in the above code if we wanted a overloaded function that handles int values we would want that the templatized constructor
@@ -937,8 +883,7 @@ class Person{
     public:
         template<typename T,
             typename = std::enable_if_t<
-                !std::is_same<Person, std::decay_t<T>>::value
-                && !std::is_base_of<Person,std::decay_t<T>>::value 
+                !std::is_base_of<Person,std::decay_t<T>>::value 
                 && !std::is_integral<std::remove_reference_t<T>>::value
             >
         >
@@ -955,7 +900,6 @@ class Person{
     private:
         std::string name;
 };
-
 ```
 
 To check whether an object of one type can be constructed from an object (or set of objects) of a different type (or set of types),
@@ -966,8 +910,7 @@ class Person{
     public:
         template<typename T,
             typename = std::enable_if_t<
-                !std::is_same<Person, std::decay_t<T>>::value
-                && !std::is_base_of<Person,std::decay_t<T>>::value 
+                !std::is_base_of<Person,std::decay_t<T>>::value 
                 && !std::is_integral<std::remove_reference_t<T>>::value
             >
         >
@@ -977,9 +920,174 @@ class Person{
             static_assert(std::is_convertible<T, std::string>::value,"Parameter n can't be used to construct a std::string");
         }
 };
-
 ```
 
-If client tries to create a Person from a type that can't be used to construct a std::string the specified error message will be
-produced. Although, since the forwarding code being part of the member initialization precedes it, we will still get some random error
-message from it.
+---
+
+### Reference collapsing
+
+We are forbidden from declaring references to references, but compilers may produce them in particular contexts, template instantiation being among them. When compilers generate references to references, reference
+collapsing dictates what happens next.
+
+```text
+If either reference is an lvalue reference, the result is an lvalue reference. Otherwise, (i.e both are rvalue references) the result is an rvalue reference.
+```
+
+**The Collapsing Rules:**
+
+* `T&` + `&` $\rightarrow$ `T&`
+* `T&` + `&&` $\rightarrow$ `T&`
+* `T&&` + `&` $\rightarrow$ `T&`
+* `T&&` + `&&` $\rightarrow$ `T&&`
+
+```text
+Reference collapsing occurs in four contexts: template instantiation, auto type generation, creation and use of typedefs and alias declarations, and decltype.
+```
+
+```cpp
+// 1. Template Instantiation
+template<typename T>
+void func(T&& param); 
+
+int x = 10;
+func(x);  // x is lvalue: T deduced as int&. (int& && collapses to int&)
+func(10); // 10 is rvalue: T deduced as int.  (int&& collapses to int&&)
+
+// 2. auto Type Generation
+int w = 20;
+auto&& v1 = w;  // w is lvalue: auto deduced as int&. (int& && collapses to int&)
+auto&& v2 = 20; // 20 is rvalue: auto deduced as int.  (int&& collapses to int&&)
+
+// 3. typedefs and Alias Declarations
+template<typename T>
+struct Widget {
+    using LvalueRefType = T&;
+    using RvalueRefType = T&&;
+};
+
+Widget<int&> wid; 
+// T is int&. 
+// LvalueRefType becomes int& &  -> collapses to int&
+// RvalueRefType becomes int& && -> collapses to int&
+
+// 4. decltype
+int z = 30;
+decltype((z))&& ref = z; 
+// decltype((z)) evaluates to int& (because (z) is an lvalue expression). 
+// Thus we get int& &&, which collapses to int&.
+```
+
+---
+
+## Perfect Forwarding
+
+Perfect forwarding means not just forwarding objects, but also the salient characteristics like type, whether it's an lvalue or rvalue, and const or volatile.
+
+Perfect forwarding fails if calling a function with a particular argument does one thing, but calling it via forwarding does something different.
+
+Perfect forwarding fails when:
+
+1. Compilers are unable to deduce a type.
+2. Compilers deduce the wrong type.
+
+### Failure Case 1: Overloaded Function Names and Template Names
+
+Note: Manually specify the overload or instantiation you want to have forwarded.
+
+```cpp
+int processVal(int value);
+int processVal(int value, int priority);
+
+void f(int (*pf)(int)); // pf = processing function
+
+template<typename T>
+void fwd(T&& param){
+    f(std::forward<T>(param));
+}
+
+f(processVal); //fine as compiler knows which processVal to match to!
+fwd(processVal); // error! which processVal?
+
+template<typename T>
+T workOnVal(T param){
+    // ...
+}
+
+fwd(workOnVal); // error! which workOnVal instantiation?
+
+// fix for above errors
+using ProcessFuncType = int (*)(int);
+
+ProcessFuncType processValPtr = processVal; // specify needed signature for processVal
+
+fwd(processValPtr); // fine!
+
+fwd(static_cast<ProcessFuncType>(processVal)); // fine
+```
+
+---
+
+### Failure Case 2: Braced Initializers
+
+Compilers are forbidden from deducing the type `std::initializer_list` in a generic template context like perfect forwarding.
+
+```cpp
+void f(const std::vector<int>& v);
+
+f({ 1, 2, 3 });   // Fine: implicitly converts to std::vector<int>
+fwd({ 1, 2, 3 }); // Error! Cannot deduce type T for the braced list
+
+// Fix: Declare a local variable first
+auto il = { 1, 2, 3 }; // Deduces to std::initializer_list<int>
+fwd(il);               // Fine!
+```
+
+### Failure Case 3: `0` or `NULL` as Null Pointers
+
+If you try to forward `0` or `NULL` to a function expecting a pointer, perfect forwarding fails because `T` deduces them as integral types (`int`), not pointers.
+**Fix:** Always use `nullptr` (which perfectly forwards as `std::nullptr_t`).
+
+### Failure Case 4: Declaration-Only Integral `static const` Data Members
+
+If a class has a `static const` data member that is only *declared* in the class but not *defined* in a `.cpp` file, passing it to `fwd` fails during linking. 
+
+Forwarding requires taking a reference, and taking a reference to a variable requires it to have a physical memory address (a definition).
+
+```cpp
+class Widget {
+public:
+    static const std::size_t MinVals = 28; // Declaration
+};
+
+void f(std::size_t val);
+
+f(Widget::MinVals);   // Fine: treated as a compile-time constant by value
+fwd(Widget::MinVals); // Linker Error! fwd takes a reference, requiring an address
+
+// Fix: Force a copy by value, or define MinVals in a .cpp file
+fwd(static_cast<std::size_t>(Widget::MinVals)); // Fine
+```
+
+### Failure Case 5: Bitfields
+
+You cannot take a non-const reference to a bitfield. Since perfect forwarding uses references (`T&&`), it is impossible to perfectly forward a bitfield directly.
+
+```cpp
+struct IPv4Header {
+    std::uint32_t version:4,
+                  IHL:4,
+                  DSCP:6,
+                  ECN:2,
+                  totalLength:16;
+};
+
+void f(std::size_t sz); 
+IPv4Header h;
+
+f(h.totalLength);   // Fine: passed by value
+fwd(h.totalLength); // Error! Cannot bind a reference to a bitfield
+
+// Fix: Make a copy first
+auto length = static_cast<std::uint16_t>(h.totalLength);
+fwd(length);        // Fine
+```
