@@ -1,17 +1,28 @@
 # Moving to Modern C++
+
 ### Uses of {} and ()
+
 ```cpp
 Widget w1; // Calls default constructor
 Widget w1 = w2; // Not assignment; calls copy ctor(constructor)
 w1 = w2; // Assignment; calls copy operator=
 ```
 
-Braced intialization
+Braced initialization
+
 ```cpp
-vector<int> v{1,3,5}
+vector<int> v{1,3,5};
+```
+
+**Vector Exception:**
+
+```cpp
+std::vector<int> v1(10, 2); // Calls non-initializer_list ctor: 10 elements, all valued 2
+std::vector<int> v2{10, 2}; // Calls initializer_list ctor: 2 elements, values 10 and 2
 ```
 
 Non-static data members
+
 ```cpp
 class W{
     private:
@@ -19,9 +30,11 @@ class W{
         int y = 1; // fine
         int z(0); // wrong (error!)
 };
+
 ```
 
 Uncopyable objects
+
 ```cpp
 atomic<int> a1{0};
 atomic<int> a2(0);
@@ -31,6 +44,7 @@ atomic<int> a3 = 0; //error
 Thus, braced initializations are called "uniform" as they can be used everywhere.
 
 Prohibition of implicit narrowing conversions among built-in types:
+
 ```cpp
 double x,y,z;
 int sum1{x+y+z}; // error! sum of doubles may not be accessible as int
@@ -59,7 +73,7 @@ Widget w3(10, 5.0); // calls second ctor
 Widget w4{10, 5.0}; // also calls second ctor
 ```
 
-But, if we include intializer_lists, things change vastly.
+But, if we include initializer_lists, things change vastly.
 
 Suppose we have class structure like this:
 
@@ -75,6 +89,7 @@ Widget w1(10, true); // calls first ctor
 Widget w2{10, true}; // calls initializer_list (10 and true converts to long double)
 Widget w3(10, 5.0); // calls second ctor
 Widget w4{10, 5.0}; // calls initializer_list (10 and 5.0 converts to long double)
+
 ```
 
 ```cpp
@@ -90,6 +105,7 @@ Widget w1(w4); // calls copy ctor
 Widget w2{w4}; // calls initializer_list ctor (w4 converts to float, and float converts to long double)
 Widget w3(std::move(w4)); // calls move ctor
 Widget w5{std::move(w4)}; // calls std::initializer_list ctor
+
 ```
 
 ```cpp
@@ -102,6 +118,7 @@ class Widget{
 
 Widget w1(10, true); // calls first ctor
 Widget w2{10, true}; // error! requires narrowing conversions as bool can't exactly represent either value.
+
 ```
 
 ```cpp
@@ -113,7 +130,9 @@ class Widget{
 };
 
 Widget w1(10, true); // calls first ctor
-Widget w2{10, true}; // calls first ctor as there's no way to convert ints and bools to std::strings thus compiler falls back on normal overload resolution.
+Widget w2{10, true}; // calls first ctor as there's no way to convert ints and bools to std::strings 
+// thus compiler falls back on normal overload resolution.
+
 ```
 
 ```cpp
@@ -125,7 +144,8 @@ class Widget {
 
 Widget w1{};   // Calls DEFAULT constructor, not the initializer_list!
 Widget w2{{}}; // Calls initializer_list constructor with an empty list!
-Widget w3      // Calls initializer_list constructor with an empty list!
+Widget w3{ {} }; // Calls initializer_list constructor with an empty list!
+
 ```
 
 ### nullptr
@@ -138,6 +158,7 @@ void f(void*);
 f(0); // calls f(int) not f(void*)
 f(NULL); // might not compile, but usually calls f(int). Never calls f(void*)
 f(nullptr); // calls f(void*)
+
 ```
 
 ### typedefs vs alias
@@ -147,6 +168,7 @@ typedef void(*FP)(int, const std::string&);
 
 // Prefer alias
 using FP = void (*)(int, const std::string&);
+
 ```
 
 ### Enums
@@ -156,13 +178,16 @@ Unscoped enums vs Scoped enums:
 ```cpp
 enum Color {black, white, red};
 auto white = false; // error! white already declared
+
 ```
+
 ```cpp
 enum class Color {black, white, red};
 auto white = false; // fine
 
 Color c = white; // error! no enum named "white"
 Color c = Color::white; //fine 
+
 ```
 
 ```cpp
@@ -170,7 +195,7 @@ enum class UserInfoFields{uiName, uiEmail, uiReputation};
 
 UserInfo uInfo;
 
-template<typeName E>
+template<typename E>
 // This function takes an arbitrary enumerator and can return its value as a compile-time constant
 constexpr auto toUType(E enumerator) noexcept{
     return static_cast<std::underlying_type_t<E>> (enumerator);
@@ -180,6 +205,7 @@ auto val = std::get<toUType(UserInfoFields::uiEmail)>(uiInfo);
 
 // otherwise we would done
 // auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uiInfo);
+
 ```
 
 ### Delete function
@@ -194,17 +220,19 @@ class basic_ios : public ios_base {
     public:
         ...
         basic_ios(const basic_ios& ) = delete;
-        basic_ios& operator = (const basic_ios&) = delete
-        ;
+        basic_ios& operator = (const basic_ios&) = delete;
         ...
 };
+
 ```
 
-Deleted functions can't be used in any way. Even code in member and friend functions(can access private functions) will fail to compile if it tries to copy basic_ios objects.
+Deleted functions can't be used in any way. Even code in member and friend functions(can access private functions)
+will fail to compile if it tries to copy basic_ios objects.
 
 ### Override
 
-Declaring functions override is a way of telling compiler that this function is derived from base and if the function is not in base or it doesn't have the virtual keyword attached.
+Declaring functions override is a way of telling compiler that this function is derived from base and if the function
+is not in base or it doesn't have the virtual keyword attached.
 
 ```cpp
 class Base {
@@ -217,24 +245,26 @@ class Derived: public Base {
         virtual void f1() override;
         virtual void f2() override; // ERROR! Base::f2 is not virtual.
 };
+
 ```
 
 ### Use const_iterators when possible
 
-To prevent modifying the value that an interator points to, we must use const iterators
+To prevent modifying the value that an iterator points to, we must use const iterators
 
 ```cpp
     std::vector<int> values;
     auto it  = std::find(values.cbegin(),values.cend(), 1983);
     values.insert(it, 1998);
+
 ```
 
 ### constexpr
 
 For variables: Always implicitly const, and values are known during compile time (translation).
 
-For functions: Can be evaluated at compile time if arguments are constant, otherwise run at runtime. (In C++11, only a single return statement was allowed. Post-C++14, loops, branches, and modifying local variables are perfectly legal).
-
+For functions: Can be evaluated at compile time if arguments are constant, otherwise run at runtime. (In C++11,
+only a single return statement was allowed. Post-C++14, loops, branches, and modifying local variables are perfectly legal).
 
 ```cpp
 constexpr auto arrSiz = 10; // 10 is a compile-time constant.
@@ -245,15 +275,19 @@ constexpr int pow(int base, int exp) noexcept{
     for(int i=0; i<exp; i++) result*=base;
     return result;
 }
+
 ```
 
 ### Thread safety
 
-Use mutex and automic. Both are move-only type (can't be copied only moved), meaning that adding them to a class strips that class of its default copy operations.
+Use mutex and atomic. Both are move-only type (can't be copied only moved), meaning that adding them to a class strips
+that class of its default copy operations.
 
-(Note: In actual practice, standard library implementers delete both copy and move operations for std::mutex because moving a lock while threads are waiting on it would break reference addresses).
+(Note: In actual practice, standard library implementers delete both copy and move operations for std::mutex because moving
+a lock while threads are waiting on it would break reference addresses).
 
-For tracking a single counter or variable requiring synchronization, std::atomic is preferred as it is lock-free (on most platforms) and less expensive than a mutex.
+For tracking a single counter or variable requiring synchronization, std::atomic is preferred as it is lock-free (on most platforms)
+and less expensive than a mutex.
 
 For synchronizing two or more variables/memory locations that must change together as a single atomic unit, use a std::mutex.
 
@@ -288,6 +322,7 @@ class Widget{
         mutable int cachedValue;
         mutable bool cacheValid{false};
 };
+
 ```
 
 ### Special member function generation
@@ -296,24 +331,33 @@ These are the functions that C++ is willing to generate on its own.
 
 * **Default Constructor** - Generated only if the class contains no user-defined constructors.
 * **Destructor** - `noexcept` by default.
-* **Copy Constructor** - Performs memberwise copy construction of non-static data members. Generated only if the class lacks a user-declared copy constructor. Deleted if the class declares a move operation.
-* **Copy assignment operator** - Performs memberwise copy assignment of non-static data members. Generated only if the class lacks a user-declared copy assignment operator. Deleted if the class declares a move operation.
-* **Move constructor & Move assignment operator** - Each performs memberwise moving of non-static data members. Generated only if the class contains **no declared copy operations, move operations, or destructor.**
+* **Copy Constructor** - Performs memberwise copy construction of non-static data members. Generated only if the class lacks a
+user-declared copy constructor. Deleted if the class declares a move operation.
+* **Copy assignment operator** - Performs memberwise copy assignment of non-static data members. Generated only if the class
+lacks a user-declared copy assignment operator. Deleted if the class declares a move operation.
+* **Move constructor & Move assignment operator** - Each performs memberwise moving of non-static data members. Generated only
+if the class contains **no declared copy operations, move operations, or destructor.**
 
-Generated special member functions are implicitly `public`, `inline`, and non-virtual (unless it's a destructor in a derived class inheriting from a base class with a virtual destructor).
+Generated special member functions are implicitly `public`, `inline`, and non-virtual (unless it's a destructor in a derived
+class inheriting from a base class with a virtual destructor).
 
-**Memberwise move** consists of move operations on data members and base classes that support move operations, but silently falls back to a copy operation for those that don't.
+**Memberwise move** consists of move operations on data members and base classes that support move operations, but silently
+falls back to a copy operation for those that don't.
 
 **Independence of operations:**
 
-* The two copy operations are independent. If we declare a copy constructor but no copy assignment operator, the compiler will still generate the copy assignment operator for us (though doing so is usually bad design).
-* The move operations are **not** independent. Declaring a move constructor prevents the compiler from generating a move assignment operator (and vice versa).
+* The two copy operations are independent. If we declare a copy constructor but no copy assignment operator, the compiler will
+still generate the copy assignment operator for us (though doing so is usually bad design).
+* The move operations are **not** independent. Declaring a move constructor prevents the compiler from generating a move assignment
+operator (and vice versa).
 
 ### `= default`
 
-Because the rules above suppress function generation, we use `= default` to explicitly tell the compiler, "I know I declared one of these, but  generate the others anyway using your default memberwise logic."
+Because the rules above suppress function generation, we use `= default` to explicitly tell the compiler, "I know I declared one of
+these, but generate the others anyway using your default memberwise logic."
 
-By explicitly declaring a `virtual` destructor, we accidentally trigger the rule that suppresses move operations. To make the class movable (and copyable) again, we must explicitly opt back in using `= default`:
+By explicitly declaring a `virtual` destructor, we accidentally trigger the rule that suppresses move operations. To make the class
+movable (and copyable) again, we must explicitly opt back in using `= default`:
 
 ```cpp
 class Base {
@@ -329,8 +373,10 @@ public:
     // (technically generation of copy ops is only deprecated, not deleted by the dtor, 
     // but specifying it is best practice).
     Base(const Base&) = default; 
-    Base& operator=(const Base&) = default; // For both move ctor and op, the source still exists, but you must not assume it contains its old value.
-    // Its main difference from the move constructor is that the destination already owns something, so it must deal with its current resource first.
+    Base& operator=(const Base&) = default; // For both move ctor and op, the source still exists, but you must not assume it 
+    // contains its old value.
+    // Its main difference from the move constructor is that the destination already owns something, so it must deal with 
+    // its current resource first.
 };
 
 ```
@@ -355,6 +401,7 @@ int x = 10;
 
 x = 20;       // x is an l-value expression
 int* p = &x;  // Its address can be taken
+
 ```
 
 Other examples:
@@ -364,13 +411,16 @@ x
 str
 vec[0]
 *ptr
+
 ```
 
-Being able to appear on the left-hand side of an assignment is not the formal definition of an l-value. For example, a `const` object is still an l-value even though it cannot be assigned to.
+Being able to appear on the left-hand side of an assignment is not the formal definition of an l-value. For example, a `const`
+object is still an l-value even though it cannot be assigned to.
 
 ```cpp
 const int value = 10;
 // value = 20; // Error, but value is still an l-value
+
 ```
 
 ---
@@ -389,12 +439,14 @@ Examples of prvalues:
 x + 5
 std::string("Hello")
 foo() // If foo returns an object by value
+
 ```
 
 Example of an xvalue:
 
 ```cpp
 std::move(x)
+
 ```
 
 An r-value does not necessarily lack identity. An xvalue refers to an existing object that still has identity.
@@ -403,6 +455,7 @@ An r-value does not necessarily lack identity. An xvalue refers to an existing o
 r-value
 ├── prvalue: temporary or newly computed value
 └── xvalue: existing object treated as expiring or movable
+
 ```
 
 ---
@@ -413,12 +466,14 @@ An r-value reference has the form:
 
 ```cpp
 T&&
+
 ```
 
 It can bind to an r-value expression.
 
 ```cpp
 std::string&& ref1 = std::string("hello");
+
 ```
 
 `std::string("hello")` is a temporary expression and a prvalue.
@@ -426,6 +481,7 @@ std::string&& ref1 = std::string("hello");
 ```cpp
 std::string name = "Hi";
 std::string&& ref2 = std::move(name);
+
 ```
 
 Here:
@@ -438,6 +494,7 @@ Here:
 ```cpp
 process(ref2);             // Passes an l-value
 process(std::move(ref2));  // Passes an xvalue
+
 ```
 
 Important distinction:
@@ -445,6 +502,7 @@ Important distinction:
 ```text
 The type of ref2 is std::string&&.
 The expression ref2 is an l-value.
+
 ```
 
 ---
@@ -458,12 +516,14 @@ It casts its argument into an xvalue, allowing move operations to be selected.
 ```cpp
 std::string a = "hello";
 std::string b = std::move(a);
+
 ```
 
 Conceptually:
 
 ```cpp
 static_cast<std::string&&>(a)
+
 ```
 
 The actual resource transfer is performed by the receiving operation, such as:
@@ -476,6 +536,7 @@ This expression alone does not transfer anything:
 
 ```cpp
 std::move(a);
+
 ```
 
 But the result does not necessarily need to be stored. Passing it to a function can also consume it:
@@ -483,6 +544,7 @@ But the result does not necessarily need to be stored. Passing it to a function 
 ```cpp
 process(std::move(a));
 container.push_back(std::move(a));
+
 ```
 
 A simplified implementation resembles:
@@ -492,6 +554,7 @@ template <typename T>
 constexpr std::remove_reference_t<T>&& move(T&& value) noexcept {
     return static_cast<std::remove_reference_t<T>&&>(value);
 }
+
 ```
 
 `std::remove_reference_t<T>` is used before adding `&&`.
@@ -503,6 +566,7 @@ For example:
 ```cpp
 T = std::string&
 T&& = std::string& && = std::string&
+
 ```
 
 After removing the reference:
@@ -510,6 +574,7 @@ After removing the reference:
 ```cpp
 std::remove_reference_t<T> = std::string
 std::remove_reference_t<T>&& = std::string&&
+
 ```
 
 Therefore, `std::move` unconditionally produces an xvalue expression.
@@ -520,6 +585,7 @@ Move constructors commonly accept non-const r-value references:
 
 ```cpp
 Widget(Widget&& other);
+
 ```
 
 A `const Widget` cannot bind to `Widget&&`.
@@ -527,11 +593,13 @@ A `const Widget` cannot bind to `Widget&&`.
 ```cpp
 const Widget a;
 Widget b = std::move(a);
+
 ```
 
 `std::move(a)` has type `const Widget&&`.
 
-Because a normal move constructor cannot modify or steal resources from a const object, a copy constructor taking `const Widget&` is often selected instead, if one exists.
+Because a normal move constructor cannot modify or steal resources from a const object, a copy constructor taking `const Widget&`
+is often selected instead, if one exists.
 
 Therefore, avoid making an object `const` when you intend to move resources from it.
 
@@ -550,6 +618,7 @@ template <typename T>
 void wrapper(T&& value) {
     process(std::forward<T>(value));
 }
+
 ```
 
 Here, `T&&` is a forwarding reference because:
@@ -563,36 +632,42 @@ Examples:
 std::string name = "Hi!";
 
 wrapper(name);
+
 ```
 
 `name` is an l-value, so `T` is deduced as:
 
 ```cpp
 T = std::string&
+
 ```
 
 `std::forward<T>(value)` produces an l-value.
 
 ```cpp
 wrapper(std::string("hello"));
+
 ```
 
 The temporary is a prvalue. `T` is deduced as:
 
 ```cpp
 T = std::string
+
 ```
 
 `std::forward<T>(value)` produces an r-value.
 
 ```cpp
 wrapper(std::move(name));
+
 ```
 
 `std::move(name)` is an xvalue. `T` is deduced as:
 
 ```cpp
 T = std::string
+
 ```
 
 `std::forward<T>(value)` produces an r-value.
@@ -606,6 +681,7 @@ template <typename T>
 void wrapper(T&& value) {
     process(value);
 }
+
 ```
 
 `process` receives an l-value in every case.
@@ -621,6 +697,7 @@ std::string name = "Hi!";
 wrapper(name); // forwards as l-value 
 wrapper(std::string("hello")); // forwards as r-value, creates a temporary object 
 wrapper(std::move(name)); // forwards as r-value, xvalue (rvalue)
+
 ```
 
 The caller's original value category is preserved.
@@ -633,6 +710,7 @@ The caller's original value category is preserved.
 
 ```cpp
 std::move(value)
+
 ```
 
 * Requires only the expression being cast.
@@ -644,7 +722,9 @@ std::move(value)
 
 ```cpp
 std::forward<T>(value)
+
 ```
+
 * Requires both a template type argument and an expression.
 * Preserves the value category represented by `T`.
 * Produces an l-value when `T` is an l-value reference.
@@ -657,6 +737,7 @@ Note:
 std::move means: treat this object as movable.
 
 std::forward means: preserve how the caller originally passed this object.
+
 ```
 
 ### rvalue reference vs universal(forwarding) reference
@@ -676,6 +757,7 @@ void f(std::vector<T>&& param); // rvalue ref. param's type declaration is vecto
 
 template<typename T>
 void f(const T&& param); // rvalue ref. param's type declaration is const T&&.
+
 ```
 
 ---
@@ -687,7 +769,8 @@ template<class T, class Allocator = allocator<T>>
 class vector {
 public:
     void push_back(T&& x); // rvalue ref.
-    // Because by the time we call push_back, the class has already been instantiated and T is fully known. There is no type deduction happening when the function is called.
+    // Because by the time we call push_back, the class has already been instantiated and T is fully known. There is no type 
+    // deduction happening when the function is called.
 };
 
 std::vector<Widget> v; 
@@ -699,19 +782,22 @@ template<class T, class Allocator = allocator<T>>
 class vector {
 public:
     template<class... Args>
-    void emplace_back(Args&&... args); // Universal reference! Args is deduced per call.
+    void emplace_back(Args&&... args); // forwarding reference! Args is deduced per call.
 };
+
 ```
 
 ---
 
-If we are in a function that returns by value, and we are returning an object bound to an rvalue reference or a universal reference, we'll want to apply std::move or std::forward when we return the reference.
+If we are in a function that returns by value, and we are returning an object bound to an rvalue reference or a forwarding
+reference, we'll want to apply std::move or std::forward when we return the reference.
 
 ```cpp
 Matrix operator+(Matrix&& lhs, const Matrix& rhs){
     lhs+=rhs;
     return std::move(lhs);
 }
+
 ```
 
 using std::move in the return statement yields more efficient code.
@@ -729,22 +815,24 @@ Widget makeWidget(){
     ...
     return w; // "copy" w into return value.
 }
+
 ```
 
-If the compilers choose not to perform copy elision, the object being returned must be treated as an rvalue. Thus, either copy elision takes place or std::move is implicitly applied to local objects being returned.
-
+If the compilers choose not to perform copy elision, the object being returned must be treated as an rvalue. Thus, either copy
+elision takes place or std::move is implicitly applied to local objects being returned.
 
 ---
 
-### Overloading on universal references
+### Overloading on forwarding references
 
-An exact match beats a match with a promotion, so the universal reference overload is invoked. Although, in situations where a template instantiation and a non-template function(normal func) are equally good matches for a function call, the normal function is preferred.
+An exact match beats a match with a promotion, so the forwarding reference overload is invoked. Although, in situations where a
+template instantiation and a non-template function(normal func) are equally good matches for a function call, the normal function is preferred.
 
 ```cpp
 std::multiset<std::string> names;
 std::string nameFromIdx(int idx); // Helper function
 
-// Overload 1: Universal Reference
+// Overload 1: forwarding Reference
 template<typename T>
 void logAndAdd(T&& name) {
     names.emplace(std::forward<T>(name));
@@ -775,4 +863,123 @@ logAndAdd(s);
 // - Overload 2 requires a promotion: short -> int.
 // An exact template match beats a normal function that requires a promotion.
 // Inside the template, it tried to pass a short to names.emplace(), which expects a string, causing a massive compilation error.
+
 ```
+
+### Tag Dispatch
+
+If the forwarding reference is part of a parameter list containing other parameters that are not forwarding references, sufficiently
+poor matches on the non-forwarding reference parameters can knock an overload with a forwarding reference out.
+
+```cpp
+template<typename T>
+void logAndAdd(T&& name){
+    logAndAddImpl(std::forward<T>(name), typename std::is_integral<std::remove_reference_t<T>>::type()); 
+    // remove reference is used to deal with 
+    // lvalue argument being passed to the forwarding reference name, as T will be deduced to be an lvalue reference. This removes the 
+    // reference qualifier from a type.
+}
+
+template<typename T>
+void logAndAddImpl(T&& name, std::false_type){ // we don't use true and false as they are runtime values, and since we need to use 
+// overload resolution which is a compile-time phenomenon we use this.
+    auto now = std::chrono::system_clock::now();
+    log(now, "logAndAdd");
+    names.emplace(std::forward<T>(name));
+}
+
+std::string nameFromIndex(int idx);
+
+void logAndAddImpl(int idx, std::true_type){
+    logAndAdd(nameFromIndex(idx));
+}
+
+```
+
+`std::true_type` and `std::false_type` are 'tags' whose only purpose is to force overload resolution to go the way we want.
+
+The same can't be used in forwarding constructor as compilers may generate copy and move constructors themselves,
+so even if we write only one constructor and use tag dispatch within it, some constructor calls may be handled by compiler-generated functions
+that bypasses the tag dispatch system.
+
+When a base class declares a perfect-forwarding constructor, that constructor will typically be called when derived classes implement
+their copy and move constructors in the conventional fashion, even though the correct behavior is for the base class's copy and move
+constructors to be invoked.
+
+`std::enable_if` helps us here as using this the template is enabled only if the condition is met.
+
+`enable_if` works on the technology `SFINAE(Substitution Failure Is Not An Error)`. If the condition is `true`, it creates a valid
+pathway for the compiler. If it is `false`, the pathway disappears forcing the compiler to look elsewhere.
+
+`std::decay<T>::type` removes the references and cv-qualifiers(i.e `const` or `volatile` qualifiers). It also turns array and
+function types into pointers.
+
+To know whether a type was derived from some another type we use `std::is_base_of<T1,T2>::value`, its `true` if `T2` is derived from `T1`.
+`std::is_base_of<T,T>::value` is true, as types are considered to be derived from themselves.
+
+```cpp
+class Person{
+    public:
+        template<typename T,
+            typename = std::enable_if_t<!std::is_base_of<Person,std::decay_t<T>>::value>
+        >
+        explicit Person(T&& n);
+        ...
+};
+
+```
+
+Now in the above code if we wanted a overloaded function that handles int values we would want that the templatized constructor
+is disabled for such arguments.
+
+```cpp
+class Person{
+    public:
+        template<typename T,
+            typename = std::enable_if_t<
+                !std::is_same<Person, std::decay_t<T>>::value
+                && !std::is_base_of<Person,std::decay_t<T>>::value 
+                && !std::is_integral<std::remove_reference_t<T>>::value
+            >
+        >
+        explicit Person(T&& n) // ctor for std::strings and args convertible to std::strings
+            : name(std::forward<T>(n))
+        {
+        ...
+        }
+
+        explicit Person(int idx) // ctor for integral args
+            : name(nameFromIdx(idx))
+            {...}
+
+    private:
+        std::string name;
+};
+
+```
+
+To check whether an object of one type can be constructed from an object (or set of objects) of a different type (or set of types),
+we use `std::is_constructible` type trait that performs a compile-time test for the same.
+
+```cpp
+class Person{
+    public:
+        template<typename T,
+            typename = std::enable_if_t<
+                !std::is_same<Person, std::decay_t<T>>::value
+                && !std::is_base_of<Person,std::decay_t<T>>::value 
+                && !std::is_integral<std::remove_reference_t<T>>::value
+            >
+        >
+        explicit Person(T&& n) // ctor for std::strings and args convertible to std::strings
+            : name(std::forward<T>(n))
+        {
+            static_assert(std::is_convertible<T, std::string>::value,"Parameter n can't be used to construct a std::string");
+        }
+};
+
+```
+
+If client tries to create a Person from a type that can't be used to construct a std::string the specified error message will be
+produced. Although, since the forwarding code being part of the member initialization precedes it, we will still get some random error
+message from it.
