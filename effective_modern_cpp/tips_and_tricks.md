@@ -1091,3 +1091,92 @@ fwd(h.totalLength); // Error! Cannot bind a reference to a bitfield
 auto length = static_cast<std::uint16_t>(h.totalLength);
 fwd(length);        // Fine
 ```
+
+---
+
+# Lambda Expressions
+
+Each lambda causes compilers to generate a unique class called a `closure class`. The statements inside a lambda become executable instructions
+in the member functions of its closure class. `closure` is the object that's passed at runtime.
+
+```cpp
+int x;
+auto c1 = [x](int y){return x*y>25;}; // c1 is copy of the closure 
+                                      // produced by the lambda
+auto c2 = c1; // c2 is the copy of c1.
+```
+
+### Avoid default capture modes in lambda expression
+
+**Why to avoid `[&]` (Dangling references):**
+
+```cpp
+auto getLambda() {
+    int localVal = 10;
+    return [&] { return localVal; }; // ERROR! localVal dies, closure holds a dangling reference.
+}
+```
+
+**Why to avoid `[=]` (Accidental `this` capture):**
+Using `[=]` inside a class member function doesn't capture the member variables directly; it silently captures the `this` pointer by value!
+
+Do this instead:
+
+```cpp
+void Widget::addFilter() const{
+    auto divisorCopy = divisor; // copy data member 
+
+    filters.emplace_back([divisorCopy](int value){return value%divisorCopy==0;}); // capture the copy use the copy
+
+    filters.emplace_back([=](int value){return value%divisorCopy==0;}); // fine! capture the copy use the copy
+}
+```
+
+Another better way to do it (C++14 Init Capture):
+
+```cpp
+void Widget::addFilter() const{
+    filters.emplace_back([divisor=divisor](int value){return value%divisor==0;}); // copy divisor to closure use the copy
+}
+```
+
+---
+
+Using an `init capture` makes it possible to specify:
+
+1. The name of a data member in the closure class generated from the lambda.
+2. an expression initializing that data member.
+
+```cpp
+class Widget{
+    public:
+        bool isValidated() const;
+        bool isProcessed() const;
+        bool isArchived() const;
+};
+
+auto pw = std::make_unique<Widget>(); // create widget
+...
+auto func = [pw = std::move(pw)]{return pw->isValidated() && pw->isArchived();}; // init data member in closure with std::move(pw)
+```
+
+---
+
+`Generic lambdas` are lambdas that use auto in their params specifications.
+
+```cpp
+auto f = [](auto&& param){
+    return func(normalize(std::forward<decltype(param)>(param)));
+};
+// decltype is being used to make it perfect forwarding
+```
+
+Note: Prefer lambdas to `std::bind` as it's more readable, expressive and may be more efficient.
+
+```cpp
+// Lambda (Clear and readable)
+auto setSoundL = [](int b) { setAlarm(b, std::chrono::hours(1)); };
+
+// std::bind (Obscure, requires placeholders, can be harder for compiler to inline)
+auto setSoundB = std::bind(setAlarm, std::placeholders::_1, std::chrono::hours(1));
+```
