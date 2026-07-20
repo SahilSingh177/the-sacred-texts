@@ -1180,3 +1180,101 @@ auto setSoundL = [](int b) { setAlarm(b, std::chrono::hours(1)); };
 // std::bind (Obscure, requires placeholders, can be harder for compiler to inline)
 auto setSoundB = std::bind(setAlarm, std::placeholders::_1, std::chrono::hours(1));
 ```
+
+
+# The Concurrency API
+
+1. Thread-based:
+
+```cpp
+int doAsyncWork();
+std::thread t(doAsyncWork);
+```
+
+Issues:
+
+* No straightforward way of getting access to the returned value. In case of any exception, the program dies.
+* Risk of oversubscription (more ready-to-run software threads than hardware threads).
+* Dealing with thread exhaustion and load balancing.
+* Our solutions to above problems could mesh with the solutions implemented in programs running in other processes on the same machine.
+
+Using Threads is appropriate when:
+
+* We need access to the API of the underlying threading implementation. ***C++ has no notion of thread priorities or affinities.*** To provide access to the API of the underlying threading implementation, `std::thread` objects typically offer the `native_handle` member function.
+* We need to and are able to optimize thread usage for our applications.
+* We need to implement threading technology beyond the C++ concurrency API (e.g. thread pools on platforms where our C++ implementations don't offer them.)
+
+2. Task-based Approach:
+
+```cpp
+auto fut = std::async(doAsyncWork); // the function obj doAsyncWork is considered a task. auto is of type std::future here.
+```
+
+This approach shifts the thread management responsibility to the implementer of the C++ Standard Library.
+
+`std::async` provides the `get` and `wait` function. `get` function provides access to the exception emitted by the function as well.
+
+`std::launch::async` launch policy means that *f* must be run asynchronously i.e., on a different thread.
+
+`std::launch::deferred` launch policy means that *f* may run only when get or wait is called on the future returned by `std::async`. *f*'s execution is deferred until such a call is made. When `get` or `wait` is invoked, *f* will execute synchronously i.e., the caller will block until *f* finishes running. If neither `get` nor `wait` is called, *f* will never run.
+
+```cpp
+auto fut = std::async(std::launch::deferred, f);
+// ...
+
+fut.wait(); // f runs
+auto x = fut.get(); // f runs
+```
+
+`std::async`'s default launch policy is ***OR*** of both, i.e., it permits *f* to be either run synchronously or asynchronously.
+
+```cpp
+// Given a thread t executing this statement.
+auto fut = std::async(f); // run f with default launch policy.
+```
+
+For the above code:
+
+* It's not possible to predict whether *f* will run concurrently with t, because *f* might be scheduled to run deferred.
+* It's not possible to predict whether *f* runs on a thread different from the thread invoking `get` or `wait` on `fut`.
+* It may not be possible to predict whether *f* runs at all, because it may not be possible to guarantee that `get` or `wait` will be called on `fut` along every path through the program.
+
+Default launch policy's scheduling flexibility often mixes poorly with the use of `thread_local` variables, because it means that if *f* reads or writes such `thread-local storage (TLS)`, it's not possible to predict which thread's variables will be accessed.
+
+```cpp
+auto fut = std::async(f); // TLS for f possibly for independent thread, but possibly for thread invoking get or wait on fut
+```
+
+There's one way of handling different launch policy in default:
+
+```cpp
+using namespace std::literals; // Required for C++14 time suffixes like 0s and 100ms
+
+auto fut = std::async(f);
+
+if (fut.wait_for(0s) == std::future_status::deferred) { // if task is deferred
+    // ... use wait or get on fut to call f synchronously
+}
+else { // task isn't deferred
+    while (fut.wait_for(100ms) != std::future_status::ready) { // infinite loop not possible (as state isn't deferred and assuming f finishes)
+        // ... task is neither deferred nor ready, so do concurrent work until it's ready
+    }
+    // ... fut is ready
+}
+```
+
+### Wrapper Fix for Truly Asynchronous Execution
+
+To avoid the unpredictability of the default launch policy when we *need* a separate thread, we can write a small wrapper that automatically applies `std::launch::async`:
+
+```cpp
+template<typename F, typename... Ts>
+inline auto reallyAsync(F&& f, Ts&&... params) {
+    return std::async(std::launch::async,
+                      std::forward<F>(f),
+                      std::forward<Ts>(params)...);
+}
+
+// Usage:
+auto fut = reallyAsync(doAsyncWork); // Guaranteed to run asynchronously
+```
