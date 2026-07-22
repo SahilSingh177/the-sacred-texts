@@ -1037,7 +1037,7 @@ void f(const std::vector<int>& v);
 f({ 1, 2, 3 });   // Fine: implicitly converts to std::vector<int>
 fwd({ 1, 2, 3 }); // Error! Cannot deduce type T for the braced list
 
-// Fix: Declare a local variable first
+// Declare a local variable first
 auto il = { 1, 2, 3 }; // Deduces to std::initializer_list<int>
 fwd(il);               // Fine!
 ```
@@ -1064,7 +1064,7 @@ void f(std::size_t val);
 f(Widget::MinVals);   // Fine: treated as a compile-time constant by value
 fwd(Widget::MinVals); // Linker Error! fwd takes a reference, requiring an address
 
-// Fix: Force a copy by value, or define MinVals in a .cpp file
+// Force a copy by value, or define MinVals in a .cpp file
 fwd(static_cast<std::size_t>(Widget::MinVals)); // Fine
 ```
 
@@ -1087,7 +1087,7 @@ IPv4Header h;
 f(h.totalLength);   // Fine: passed by value
 fwd(h.totalLength); // Error! Cannot bind a reference to a bitfield
 
-// Fix: Make a copy first
+// Make a copy first
 auto length = static_cast<std::uint16_t>(h.totalLength);
 fwd(length);        // Fine
 ```
@@ -1278,3 +1278,386 @@ inline auto reallyAsync(F&& f, Ts&&... params) {
 // Usage:
 auto fut = reallyAsync(doAsyncWork); // Guaranteed to run asynchronously
 ```
+
+---
+
+### `std::thread`: Joinable and Unjoinable
+
+`std::thread` objects are of two types: `joinable` and `unjoinable`.
+
+* A `joinable std::thread` corresponds to an underlying asynchronous thread of execution that is or could be running, blocked, or waiting to be scheduled.
+
+Example:
+
+```cpp
+std::thread t([] {
+    // work
+});
+
+std::cout << t.joinable(); // true (remains true until t.join() or t.detach() is called)
+// joinable() returns true when the thread object’s ID is not the default empty thread ID.
+```
+
+Joinable does not mean the underlying thread is still running.
+
+* An `unjoinable std::thread` is one that's not joinable as it's either a default-constructed `std::thread`, it has been moved from, it has been joined, or it has been detached.
+
+Example:
+
+```cpp
+std::thread t; // Default constructed thread
+
+std::cout << t.joinable(); // false
+```
+
+```cpp
+std::thread t(worker);
+t.join();
+
+std::cout << t.joinable(); // false
+```
+
+```cpp
+std::thread t(worker);
+t.detach();
+
+std::cout << t.joinable(); // false
+```
+
+```cpp
+std::thread t1(worker);
+std::thread t2 = std::move(t1);
+
+std::cout << t1.joinable(); // false
+std::cout << t2.joinable(); // true
+// The actual worker did not move. Only the C++ handle representing ownership of it moved.
+```
+
+---
+
+### What `join()` does?
+
+`join()` blocks the calling thread until the represented thread has completed. After a successful `join()`, the thread object becomes unjoinable. The worker’s completion also synchronizes with the return from `join()`, which makes earlier writes performed by the worker visible according to the C++ memory model.
+
+```cpp
+#include <iostream>
+#include <thread>
+
+int result = 0;
+
+void calculate()
+{
+    result = 42;
+}
+
+int main()
+{
+    std::thread t(calculate);
+
+    t.join();
+
+    // Safe because completion of calculate synchronizes with join().
+    std::cout << result << '\n';
+}
+```
+
+```text
+main thread:    start worker ---------- wait at join() ------- continue
+worker thread:               calculate result ----- finish
+```
+
+`join()` may be called only once. Calling `join()` on an unjoinable thread throws `std::system_error`.
+
+### What `detach()` does?
+
+`detach()` separates the `std::thread` object from the underlying execution.
+
+```cpp
+void background_work()
+{
+    // May continue after the creating function returns.
+}
+
+int main()
+{
+    std::thread t(background_work);
+    t.detach();
+
+    // t no longer owns the worker.
+}
+```
+
+After detaching:
+
+* The worker may continue running.
+* The original `std::thread` object becomes unjoinable.
+* We can no longer wait for that worker through this thread object.
+* The implementation releases the thread resources when the worker eventually finishes.
+
+```text
+main thread:    start worker -- detach -- continue -- possibly exit
+worker thread:               continue independently -------- finish
+```
+
+Detach is dangerous as it may access a dead object.
+
+And it causes difficulty in:
+
+* Knowing whether the work completed.
+* Propagating errors.
+* Coordinating shutdown.
+* Ensuring referenced objects remain alive.
+* Testing program completion.
+* Preventing work from outliving global or static objects.
+
+```text
+Default constructed
+        |
+        v
+   unjoinable
+
+Constructed with function
+        |
+        v
+     joinable
+      /     \
+ join()     detach()
+   |           |
+   v           v
+unjoinable  unjoinable
+```
+
+Moving also transfers the joinable state:
+
+```text
+t1: joinable
+       |
+       | std::thread t2 = std::move(t1)
+       v
+t1: unjoinable
+t2: joinable
+```
+
+Thread completion alone does not change the object to unjoinable:
+
+```text
+worker running       worker finished
+t.joinable() == true t.joinable() == true
+
+```
+Only `join()`, `detach()`, or moving ownership away changes that ownership state.
+---
+
+We must explicitly resolve ownership through `join()` or `detach()` before destroying a `std::thread`.
+
+Implicit detach is harmful because it lets threads unexpectedly outlive the objects and library state they access.
+
+Implicit join can alter performance unexpectedly only on exceptional control-flow paths, which makes the problem difficult to reproduce. And, it can turn exception paths into hangs or deadlocks.
+
+Thus, we have to ensure that if we use a `std::thread` object, it's made unjoinable on every path out of the scope in which it's defined.
+Anytime we want to perform some action along every path out of a block, the normal approach is to put that action in the destructor of a local object. Such objects are known as ***RAII objects*** (comes from RAII classes, Resource Acquisition Is Initialization).
+
+Each container's destructor destroys the container's contents, and releases its memory. There is no standard RAII class for `std::thread` objects (prior to C++20).
+
+We can write it ourselves though:
+
+```cpp
+class ThreadRAII{
+    public:
+        enum class DtorAction {join, detach};
+
+        ThreadRAII(std::thread&& t, DtorAction a): action(a), t(std::move(t)){} 
+        // in dtor take action 'action' on t.
+        // ctor accepts only std::thread rvalues because we want to move the passed-in std::thread into the ThreadRAII object.
+        // declare std::thread in last so that all the other data members that precede it would be initialized and can be accessed by the asynchronous running thread.
+        ~ThreadRAII(){
+            if(t.joinable()){
+                if(action==DtorAction::join){
+                    t.join();
+                }
+                else{
+                    t.detach();
+                }
+            }
+        }
+
+        ThreadRAII(ThreadRAII&&) = default;
+        ThreadRAII& operator = (ThreadRAII &&) = default;
+        // since ThreadRAII declares a dtor, there will be no compiler-generated move operations, so we explicitly request its creation.
+
+        std::thread& get(){return t;}
+    private:
+        DtorAction action; // FIX: Changed from 'a' to 'action' to match constructor list and dtor usage
+        std::thread t;
+};
+
+bool doWork(std::function<bool(int)> filter, int maxVal = tenMillion){
+    std::vector<int> goodVals;
+
+    ThreadRAII t(std::thread([&filter,maxVal,&goodVals]{ // use RAII object
+            for(auto i=0;i<=maxVal;i++){
+                if(filter(i)) goodVals.push_back(i);
+            }
+        }),ThreadRAII::DtorAction::join // RAII action
+    );
+
+    auto nh = t.get().native_handle();
+    // ...
+    if(conditionsAreSatisfied){
+        t.get().join();
+        performComputation(goodVals);
+        return true;
+    }
+    return false;
+}
+```
+---
+
+### `std::future` Destructor Behavior
+
+A `future` destructor behaves as if it did an `implicit join`, sometimes an `implicit detach`, and sometimes neither. Although, it never causes program termination like `std::thread`.
+
+A *future* is one end of a communication channel through which a callee transmits a result to a caller. The callee (usually running asynchronously) writes the result of its computation into the communication channel (typically via a `std::promise` object), and the caller reads that result using a future.
+
+The callee's result is stored in a location known as `shared state` which is typically represented by a heap-based object, but its type, interface, and implementation are not specified by the Standard.
+
+```text
+Caller <--- std::future --- [ Shared State ] <--- std::promise --- Callee
+                               (Result)
+```
+
+The normal behavior is that a future's destructor destroys the future object. It destroys the future's data members and decrements the reference count inside the shared state. The reference count makes it possible for the library to know when the shared state can be destroyed.
+
+**Exception to the normal behavior (it blocks) occurs ONLY when ALL of these happen:**
+
+1. It refers to a shared state that was created due to a call to `std::async`.
+2. The task's launch policy is `std::launch::async` (either explicitly chosen or chosen by the runtime system).
+3. The future is the last future referencing the shared state. For `std::future`, this will always be the case, but for `std::shared_future`, if other `std::shared_future`s refer to the same shared state as the future being destroyed, the future being destroyed follows the normal behavior (i.e., it simply destroys its data members). The *last* one destroyed will block.
+
+Only when all of these conditions are fulfilled does a future's destructor exhibit special behavior, and that behavior is to block until the asynchronously running task completes (i.e., an implicit join with the thread running the `std::async`-created task).
+
+### `std::packaged_task` and Futures
+
+Using a `std::packaged_task` object prepares a function (or other callable object) for asynchronous execution by wrapping it such that its result is put into a shared state. A future referring to that shared state can then be obtained via `std::packaged_task`'s `get_future()` function.
+
+```cpp
+int calcValue(); // func to run
+
+std::packaged_task<int()> pt(calcValue); // wrap calcValue so that it can run asynchronously
+
+auto fut = pt.get_future(); // Added missing parentheses for function call
+```
+
+The future `fut` doesn't refer to a shared state created by a call to `std::async`, so its destructor will behave normally. Once created, a `std::packaged_task pt` can be run on a thread. `std::packaged_task`s aren't copyable, so when `pt` is passed to the `std::thread` constructor, it must be cast to an rvalue.
+
+```cpp
+std::packaged_task<int()> pt(calcValue);
+
+auto fut = pt.get_future();
+
+std::thread t(std::move(pt));
+// ...
+```
+
+If post thread `t` creation:
+
+1. Nothing happens on `t` -> `t` will be joinable at the end of the scope. This will cause the program to terminate.
+2. A `join` is done on `t` -> There will be no need for `fut` to block in its destructor, because `join` is already present.
+3. A `detach` is done on `t` -> No need for `fut` to detach in its destructor.
+
+In summary, when we have a future corresponding to a shared state that arose due to a `std::packaged_task`, there's usually no need to adopt a special destruction policy, because the decision among termination, joining, or detaching will be made in the code that manipulates the `std::thread` on which the `std::packaged_task` is typically run.
+
+---
+
+### One-Shot Event Communication
+
+For communication between threads, we may use the following methods, but they have issues:
+
+* `std::condition_variable` (condvar) -> Not good for spurious wakeups; if the detecting task notifies the condvar before the reacting task waits, the reacting task will hang.
+* atomic boolean flag (`std::atomic<bool> flag`) -> Heavy cost of polling.
+* mutex, condvar, and boolean flag combined -> Works, but requires complex code.
+
+Instead of all the above methods, for one-shot communication, we use `std::promise<void>`.
+
+```cpp
+std::promise<void> p; // promise for communication channels
+
+// ... detect event
+p.set_value(); // tell reacting task
+
+// ... prepare to react
+p.get_future().wait(); // wait on future corresponding to p
+
+// ... react to event
+```
+
+If we would like to create a suspended thread that we could configure before letting it run (these configs could be setting priority or core affinity), we use `std::thread` since it offers a `native_handle` member function which gives us access to the underlying OS thread API.
+
+```cpp
+std::promise<void> p;
+void react(); // func for reacting task
+
+void detect() { // func for detecting task
+    std::thread t([]{
+        p.get_future().wait(); // suspend t until future is set
+        react(); 
+    });
+    // ... here, t is suspended prior to call to react
+
+    p.set_value(); // unsuspend t (and thus call react)
+    // ... do additional work
+    t.join(); // make t unjoinable
+}
+```
+
+For multiple reacting tasks, we follow the code below:
+
+```cpp
+std::promise<void> p;
+
+void detect() { 
+    auto sf = p.get_future().share(); // sf's type is std::shared_future<void>
+
+    std::vector<std::thread> vt; // container for reacting threads
+
+    for(int i = 0; i < threadsToRun; i++) {
+        vt.emplace_back([sf]{ sf.wait(); react(); }); // wait on local copy of sf
+    }
+    // ... detect hangs if this '...' code throws! 
+    // (Because p.set_value() would never be reached)
+
+    p.set_value(); // unsuspend all threads
+    // ...
+    for(auto& t : vt){
+        t.join(); // make all threads unjoinable
+    }
+}
+```
+
+---
+
+### `std::atomic` vs `volatile`
+
+`std::atomic` is used for atomic execution of instructions including RMW (Read-Modify-Write) operations like `++` or `--`.
+
+```cpp
+std::atomic<int> ai(0);
+ai = 10;
+++ai;
+--ai;
+```
+
+`volatile` is the way we tell compilers that we're dealing with special memory (like memory-mapped I/O), so it should not perform any optimizations on operations on this memory.
+
+```cpp
+volatile int x;
+auto y = x; // read x; y will be of type int as its neither a reference nor a pointer, so the const and volatile are dropped.
+
+y = x; // read x again
+x = 10; // write x
+x = 20; // write x again (cannot be optimized away by the compiler)
+```
+
+`std::atomic` offers neither move construction nor move assignment, and its copy construction and copy assignment are deleted because those operations cannot be guaranteed to be atomic as a whole.
+
+Note: `std::atomic` and `volatile` serve entirely different purposes, but they can be used together (e.g., `volatile std::atomic<int> val;` for concurrently accessed memory-mapped I/O).
